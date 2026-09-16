@@ -1,0 +1,13 @@
+workload,option,cost_per_1k_req_or_owned_at_100pct,owned_breakeven_util
+batch,owned_at_100pct,0.0864,
+batch,rental,0.2752,0.314
+batch,DeepInfra,0.1843,0.4689
+batch,AWS Bedrock,0.9216,0.0938
+batch,Fireworks,1.152,0.075
+batch,Together,1.3312,0.0649
+interactive,owned_at_100pct,0.2099,
+interactive,rental,0.6684,0.314
+interactive,DeepInfra,0.1843,1.1387
+interactive,AWS Bedrock,0.9216,0.2277
+interactive,Fireworks,1.152,0.1822
+interactive,Together,1.3312,0.1577

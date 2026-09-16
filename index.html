@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Own, rent, or API? LLM inference cost model</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EEF1F4; --panel:#FFFFFF; --ink:#1B2433; --muted:#5A6678; --line:#C9D1DB;
+  --own:#2F6B5E; --rent:#A86E12; --warn:#8C2F39; --soft:#E2E7ED;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#131A24; --panel:#1B2432; --ink:#E6EBF2; --muted:#98A4B5; --line:#344256;
+    --own:#6FBFAC; --rent:#E3AA4E; --warn:#E07C87; --soft:#243044;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#131A24; --panel:#1B2432; --ink:#E6EBF2; --muted:#98A4B5; --line:#344256;
+  --own:#6FBFAC; --rent:#E3AA4E; --warn:#E07C87; --soft:#243044;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:15px;line-height:1.5;font-variant-numeric:tabular-nums}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 60px}
+header h1{font-family:"Newsreader",Georgia,serif;font-weight:600;font-size:clamp(28px,4vw,40px);line-height:1.1;margin:0 0 6px}
+header p{margin:0;color:var(--muted);max-width:70ch}
+.note{margin-top:10px;display:inline-block;padding:4px 10px;border:1px solid var(--line);border-radius:4px;font-size:13px;color:var(--muted)}
+.grid{display:grid;grid-template-columns:290px 1fr;gap:20px;margin-top:24px;align-items:start}
+@media (max-width:860px){.grid{grid-template-columns:1fr}}
+aside{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px;position:sticky;top:12px}
+@media (max-width:860px){aside{position:static}}
+aside h2{font-size:14px;margin:14px 0 6px;color:var(--muted);font-weight:600}
+aside h2:first-child{margin-top:0}
+.ctl{margin:8px 0 12px}
+.ctl label{display:flex;justify-content:space-between;font-size:13.5px}
+.ctl label b{font-weight:600}
+input[type=range]{width:100%;accent-color:var(--ink)}
+input:focus-visible,button:focus-visible{outline:2px solid var(--own);outline-offset:2px}
+button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+button{font:inherit;font-size:13px;background:none;border:1px solid var(--line);color:var(--ink);border-radius:4px;padding:5px 10px;cursor:pointer}
+main section{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:18px 20px;margin-bottom:20px}
+main h3{font-family:"Newsreader",Georgia,serif;font-size:22px;font-weight:600;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 12px;font-size:14px}
+.verdict{font-family:"Newsreader",Georgia,serif;font-size:clamp(22px,2.6vw,28px);line-height:1.25;margin:0 0 14px;max-width:44ch}
+.chart{width:100%;overflow-x:auto}
+svg text{fill:var(--muted);font-size:11px;font-family:inherit}
+.legend{display:flex;gap:18px;font-size:13px;margin-top:6px;flex-wrap:wrap}
+.sw{display:inline-block;width:18px;height:3px;vertical-align:middle;margin-right:6px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:right;padding:7px 8px;border-bottom:1px solid var(--soft)}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);font-weight:600;font-size:13px}
+tr.hl td{background:var(--soft);font-weight:600}
+.tblwrap{overflow-x:auto}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media (max-width:640px){.two{grid-template-columns:1fr}}
+.own{color:var(--own)} .rent{color:var(--rent)} .warn{color:var(--warn)}
+.bars{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+.bar{display:grid;grid-template-columns:70px 1fr 90px;gap:10px;align-items:center;font-size:14px}
+.track{height:16px;background:var(--soft);border-radius:3px;overflow:hidden}
+.fill{height:100%;transition:width .25s}
+@media (prefers-reduced-motion:reduce){.fill{transition:none}}
+table.src td:last-child{text-align:left}
+ul.ex{margin:6px 0 0;padding-left:18px;color:var(--muted);font-size:14px}
+footer{color:var(--muted);font-size:13px;max-width:75ch}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Own, rent, or call an API for LLM inference?</h1>
+  <p>Cost of a 4× H100 PCIe server versus rented GPUs and hosted Llama 70B APIs. Every default input is a public figure from 2026, listed under Sources.</p>
+  <span class="note">Server price excludes CPUs, memory, storage, and power supplies, so ownership costs here are a lower bound.</span>
+</header>
+
+<div class="grid">
+<aside aria-label="Model inputs">
+  <h2>Owned server</h2>
+  <div class="ctl"><label for="gpu_price">Price per H100 <b id="gpu_priceV"></b></label><input id="gpu_price" type="range" min="15000" max="45000" step="500" value="27500"></div>
+  <div class="ctl"><label for="host">Server chassis <b id="hostV"></b></label><input id="host" type="range" min="0" max="60000" step="1" value="10414"></div>
+  <div class="ctl"><label for="life">Depreciation life <b id="lifeV"></b></label><input id="life" type="range" min="2" max="7" step="1" value="5"></div>
+  <div class="ctl"><label for="kw">IT power <b id="kwV"></b></label><input id="kw" type="range" min="1" max="6" step="0.1" value="2.1"></div>
+  <div class="ctl"><label for="pue">PUE <b id="pueV"></b></label><input id="pue" type="range" min="1" max="2" step="0.01" value="1.52"></div>
+  <div class="ctl"><label for="kwh">Electricity / kWh <b id="kwhV"></b></label><input id="kwh" type="range" min="0.05" max="0.50" step="0.0001" value="0.2575"></div>
+  <div class="ctl"><label for="colo">Colocation / kW-month <b id="coloV"></b></label><input id="colo" type="range" min="50" max="500" step="0.05" value="194.95"></div>
+  <h2>Rental and usage</h2>
+  <div class="ctl"><label for="rate">Rental / GPU-hour <b id="rateV"></b></label><input id="rate" type="range" min="1" max="8" step="0.01" value="3.29"></div>
+  <div class="ctl"><label for="util">Your utilization <b id="utilV"></b></label><input id="util" type="range" min="5" max="100" step="1" value="50"></div>
+  <button id="reset" type="button">Reset to sourced inputs</button>
+</aside>
+
+<main>
+  <section aria-live="polite">
+    <p class="verdict" id="verdict"></p>
+    <div class="chart" id="curve"></div>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--own)"></span>Owned cost per productive GPU-hour</span>
+      <span><span class="sw" style="background:var(--rent)"></span>Rental rate</span>
+      <span><span class="sw" style="background:var(--ink);height:1px;border-top:1px dashed var(--ink)"></span>Your utilization</span>
+    </div>
+  </section>
+
+  <div class="two">
+    <section>
+      <h3>Total spend over <span id="lifeT"></span></h3>
+      <p class="sub">At your utilization, undiscounted.</p>
+      <div class="bars">
+        <div class="bar"><span class="own">Owned</span><div class="track"><div class="fill" id="bOwn" style="background:var(--own)"></div></div><span id="vOwn"></span></div>
+        <div class="bar"><span class="rent">Rental</span><div class="track"><div class="fill" id="bRent" style="background:var(--rent)"></div></div><span id="vRent"></span></div>
+      </div>
+      <p id="gap" style="margin:14px 0 0"></p>
+    </section>
+    <section>
+      <h3>How the owned cost builds</h3>
+      <p class="sub">Annual equivalent.</p>
+      <div class="tblwrap"><table>
+        <tr><td>Purchase (4 GPUs + chassis)</td><td id="cap"></td></tr>
+        <tr><td>Depreciation</td><td id="dep"></td></tr>
+        <tr><td>Colocation (kW × rate × 12)</td><td id="col"></td></tr>
+        <tr><td>Energy (kW × PUE × 8,760 h × $/kWh)</td><td id="eng"></td></tr>
+        <tr class="hl"><td>Annual owned cost</td><td id="ann"></td></tr>
+      </table></div>
+    </section>
+  </div>
+
+  <section>
+    <h3>Break-even by rental price</h3>
+    <p class="sub">Public on-demand H100 rates, Aug–Sept 2026. Azure and SXM-based rates are not fully like-for-like with a PCIe server.</p>
+    <div class="tblwrap"><table id="sens"></table></div>
+  </section>
+
+  <section>
+    <h3>Break-even across sourced input ranges</h3>
+    <p class="sub">One input changed at a time; everything else at your current settings.</p>
+    <div class="tblwrap"><table id="ranges"></table></div>
+  </section>
+
+  <section>
+    <h3>Self-host or call an API?</h3>
+    <p class="sub">Llama 3.x 70B (FP8) served with vLLM, versus hosted APIs for the same model. Cost per 1,000 requests of 1,024 input and 256 output tokens.</p>
+    <div class="two" style="margin-bottom:6px">
+      <div class="ctl">
+        <label>Workload</label>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button type="button" class="wl" data-tps="3400" aria-pressed="true">Batch</button>
+          <button type="button" class="wl" data-tps="1400" aria-pressed="false">Interactive chat</button>
+        </div>
+      </div>
+      <div class="ctl"><label for="tps">Output throughput <b id="tpsV"></b></label><input id="tps" type="range" min="200" max="6000" step="100" value="3400"></div>
+    </div>
+    <p id="tokVerdict" style="margin:4px 0 12px"></p>
+    <div class="tblwrap"><table id="tok"></table></div>
+    <p class="sub" style="margin-top:10px">Throughput is measured on 4× H100 SXM with NVLink (batch: 256 concurrent requests; interactive: 64 users at ~22 tok/s each). A PCIe server is likely slower, which raises every self-host break-even.</p>
+  </section>
+
+  <section>
+    <h3>Sources</h3>
+    <div class="tblwrap"><table class="src">
+      <tr><th>Input</th><th>Default</th><th>Source</th></tr>
+      <tr><td>H100 80GB PCIe card</td><td>$27,500</td><td>Midpoint of $25K–$30K range, Runpod H100 guide, Sept 2026</td></tr>
+      <tr><td>Server chassis</td><td>$10,414</td><td>Dell R760xa barebone with 4-GPU kit, Newegg listing. Excludes CPUs, memory, storage, power supplies</td></tr>
+      <tr><td>IT power</td><td>2.1 kW</td><td>4 × 350 W H100 PCIe TDP (Runpod) + 2 × 350 W Xeon TDP (R760xa spec, IT Creations). Rated maximums</td></tr>
+      <tr><td>PUE</td><td>1.52</td><td>Uptime Institute Global Data Center Survey 2026</td></tr>
+      <tr><td>Electricity</td><td>$0.2575/kWh</td><td>EIA Electric Power Monthly, California commercial, Apr 2026 (US: $0.1351)</td></tr>
+      <tr><td>Colocation</td><td>$194.95/kW-month</td><td>CBRE national average lease rate (Silicon Valley: $180–$275)</td></tr>
+      <tr><td>Depreciation life</td><td>5 years</td><td>Amazon 10-K, server life revised from 6 to 5 years (2025). Microsoft and Alphabet use 6; critics argue 2–3</td></tr>
+      <tr><td>Rental rate</td><td>$3.29/GPU-hr</td><td>Lambda H100 PCIe list price; median across 38 providers $3.36 (GetDeploying, Sept 16, 2026)</td></tr>
+      <tr><td>Rental comparison rates</td><td>$1.99–$6.98</td><td>Runpod, CloudZero, IntuitionLabs pricing pages, Aug–Sept 2026</td></tr>
+      <tr><td>Serving throughput</td><td>3,400 / 1,400 tok/s</td><td>GeneralCompute vLLM benchmark, Llama 3.1 70B FP8, 4× H100 SXM, Jun 2026</td></tr>
+      <tr><td>API prices, Llama 3.3 70B</td><td>$0.10/$0.32 to $1.04 per 1M</td><td>OpenRouter (DeepInfra), Aug 2026; Markaicode guides for Bedrock, Fireworks, Together, Sept 2026</td></tr>
+      <tr><td>Utilization</td><td>Not assumed</td><td>The model solves for break-even; the slider is for your own number</td></tr>
+    </table></div>
+  </section>
+
+  <section>
+    <h3>What this model leaves out</h3>
+    <ul class="ex">
+      <li>CPUs, memory, storage, power supplies, networking, and installation. These all raise owned cost.</li>
+      <li>Engineering and support staff time to run self-hosted models.</li>
+      <li>Financing, taxes, resale value, failures, and spares.</li>
+      <li>Reserved, committed-use, and negotiated discounts on rentals and APIs.</li>
+      <li>Power is at rated maximum, not measured draw. Quality parity between self-hosted and API models is assumed.</li>
+      <li>Prices move monthly; every figure is dated.</li>
+    </ul>
+  </section>
+</main>
+</div>
+<footer class="wrap" style="padding-top:0">Formulas match <code>gpu_tco_model.py</code> in this repo.</footer>
+
+<script>
+const H = 8760, GPUS = 4;
+const DEF = {gpu_price:27500,host:10414,life:5,kw:2.1,pue:1.52,kwh:0.2575,colo:194.95,rate:3.29,util:50};
+const $ = id => document.getElementById(id);
+const usd = (v,d=0) => (v<0?"-":"")+"$"+Math.abs(v).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
+const pct = v => (v*100).toFixed(1)+"%";
+const be_fmt = b => b>1?'<span class="warn">Never</span>':pct(b);
+const fmt = {
+  gpu_price:v=>usd(v), host:v=>usd(v), life:v=>v+" yr", kw:v=>(+v).toFixed(1)+" kW", pue:v=>(+v).toFixed(2),
+  kwh:v=>"$"+(+v).toFixed(4), colo:v=>usd(v,2), rate:v=>usd(v,2), util:v=>v+"%"
+};
+const get = () => Object.fromEntries(Object.keys(DEF).map(k=>[k,+$(k).value]));
+
+function model(a){
+  const capex = GPUS*a.gpu_price + a.host;
+  const energy = a.kw*a.pue*H*a.kwh, colo = a.kw*a.colo*12, dep = capex/a.life;
+  const annual = dep + colo + energy;
+  return {capex,energy,colo,dep,annual,tco:capex+a.life*(colo+energy),
+          be:r=>annual/(GPUS*H*r), perHr:u=>annual/(GPUS*H*u)};
+}
+
+function drawCurve(a,m){
+  const W=760,Hh=300,pl=52,pr=16,pt=14,pb=34, umin=0.05;
+  const maxY=Math.max(a.rate*2.2,6);
+  const x=u=>pl+(u-umin)/(1-umin)*(W-pl-pr);
+  const y=v=>pt+(1-Math.min(v,maxY)/maxY)*(Hh-pt-pb);
+  let pts=[]; for(let u=umin;u<=1.0001;u+=0.005) pts.push(`${x(u).toFixed(1)},${y(m.perHr(u)).toFixed(1)}`);
+  let g="";
+  for(let i=0;i<=5;i++){const v=maxY*i/5;g+=`<line x1="${pl}" x2="${W-pr}" y1="${y(v)}" y2="${y(v)}" stroke="var(--soft)"/><text x="${pl-8}" y="${y(v)+4}" text-anchor="end">$${v.toFixed(1)}</text>`;}
+  for(let p=10;p<=100;p+=10) g+=`<text x="${x(p/100)}" y="${Hh-12}" text-anchor="middle">${p}%</text>`;
+  const be=m.be(a.rate), u=a.util/100;
+  const mark = be<=1&&be>=umin ? `<circle cx="${x(be)}" cy="${y(a.rate)}" r="5" fill="var(--panel)" stroke="var(--ink)" stroke-width="2"/><text x="${x(be)+8}" y="${y(a.rate)-10}" style="fill:var(--ink);font-weight:600">Break-even ${pct(be)}</text>` : "";
+  $("curve").innerHTML=`<svg viewBox="0 0 ${W} ${Hh}" width="100%" role="img" aria-label="Owned cost per GPU-hour versus utilization; break-even ${be>1?'above 100%':pct(be)}">
+  ${g}<line x1="${pl}" x2="${W-pr}" y1="${y(a.rate)}" y2="${y(a.rate)}" stroke="var(--rent)" stroke-width="2.5"/>
+  <polyline points="${pts.join(" ")}" fill="none" stroke="var(--own)" stroke-width="2.5"/>
+  <line x1="${x(u)}" x2="${x(u)}" y1="${pt}" y2="${Hh-pb}" stroke="var(--ink)" stroke-dasharray="4 4"/>
+  ${mark}<text x="${(W+pl)/2}" y="${Hh}" text-anchor="middle">Productive utilization</text></svg>`;
+}
+
+const RATES=[["Runpod PCIe, community",1.99],["Runpod PCIe, secure",2.89],["Lambda PCIe",3.29],["Median, 38 providers",3.36],["Lambda (CloudZero)",3.99],["CoreWeave",4.25],["Azure, high end",6.98]];
+const RANGES=[["Depreciation life","life",3,"3 yr (critics)"],["Depreciation life","life",6,"6 yr (Microsoft, Alphabet)"],
+  ["H100 price","gpu_price",25000,"$25,000 (range low)"],["H100 price","gpu_price",30000,"$30,000 (range high)"],
+  ["Colocation","colo",180,"$180 (Silicon Valley low)"],["Colocation","colo",275,"$275 (Silicon Valley high)"],
+  ["Electricity","kwh",0.1351,"$0.1351 (US commercial avg)"]];
+const APIS=[["DeepInfra",0.10,0.32],["AWS Bedrock",0.72,0.72],["Fireworks",0.90,0.90],["Together",1.04,1.04]];
+
+function render(){
+  const a=get(); Object.keys(DEF).forEach(k=>$(k+"V").textContent=fmt[k](a[k]));
+  const m=model(a), u=a.util/100, be=m.be(a.rate);
+  $("verdict").innerHTML = be>1
+    ? `At ${usd(a.rate,2)}/GPU-hour, renting is cheaper at any utilization.`
+    : `Owning beats renting at ${usd(a.rate,2)}/GPU-hour once the GPUs do useful work more than <b>${pct(be)}</b> of the time.`;
+  drawCurve(a,m);
+
+  const rentTot=GPUS*H*u*a.rate*a.life, diff=rentTot-m.tco, mx=Math.max(m.tco,rentTot);
+  $("lifeT").textContent=a.life+" years";
+  $("bOwn").style.width=(m.tco/mx*100)+"%"; $("bRent").style.width=(rentTot/mx*100)+"%";
+  $("vOwn").textContent=usd(m.tco); $("vRent").textContent=usd(rentTot);
+  $("gap").innerHTML = Math.abs(diff)<1 ? "Same cost." : diff>0
+    ? `At ${a.util}%, owning costs <b class="own">${usd(diff)}</b> less.` : `At ${a.util}%, renting costs <b class="rent">${usd(-diff)}</b> less.`;
+  $("cap").textContent=usd(m.capex); $("dep").textContent=usd(m.dep); $("col").textContent=usd(m.colo);
+  $("eng").textContent=usd(m.energy); $("ann").textContent=usd(m.annual);
+
+  const rates=RATES.some(r=>r[1]===a.rate)?RATES:[...RATES,["Your input",a.rate]].sort((p,q)=>p[1]-q[1]);
+  $("sens").innerHTML="<tr><th>Provider</th><th>$/GPU-hour</th><th>Break-even</th><th>At your "+a.util+"%</th></tr>"+
+    rates.map(([n,r])=>{const b=m.be(r);return `<tr class="${r===a.rate?'hl':''}"><td>${n}</td><td>${usd(r,2)}</td><td>${be_fmt(b)}</td><td>${b>1||u<b?'<span class="rent">Rent</span>':'<span class="own">Own</span>'}</td></tr>`}).join("");
+
+  $("ranges").innerHTML="<tr><th>Input</th><th>Value</th><th>Break-even</th></tr>"+
+    `<tr class="hl"><td>Your current settings</td><td></td><td>${be_fmt(be)}</td></tr>`+
+    RANGES.map(([lab,k,v,d])=>`<tr><td>${lab}</td><td>${d}</td><td>${be_fmt(model({...a,[k]:v}).be(a.rate))}</td></tr>`).join("");
+  renderTok(a,m);
+}
+
+function renderTok(a,m){
+  const u=a.util/100, tps=+$("tps").value;
+  $("tpsV").textContent=tps.toLocaleString()+" tok/s";
+  document.querySelectorAll(".wl").forEach(b=>b.setAttribute("aria-pressed",String(+b.dataset.tps===tps)));
+  const reqYr=tps/256*H*3600, own100=m.annual/reqYr*1000, own=own100/u;
+  const rent=GPUS*a.rate/(tps/256*3600)*1000;
+  const api=APIS.map(([n,i,o])=>[n,(1024*i+256*o)/1e6*1000]);
+  const ch=api.reduce((p,q)=>q[1]<p[1]?q:p), b=own100/ch[1];
+  $("tokVerdict").innerHTML = b>1
+    ? `The cheapest API, ${ch[0]} ($${ch[1].toFixed(3)} per 1,000 requests), costs less than owning even at 100% utilization.`
+    : `Owning beats the cheapest API, ${ch[0]}, only above <b>${pct(b)}</b> utilization.`;
+  let h=`<tr><th>Option</th><th>$ per 1,000 requests</th><th>Owning wins above</th></tr>
+    <tr class="hl"><td class="own">Owned server at ${a.util}%</td><td>$${own.toFixed(3)}</td><td></td></tr>
+    <tr><td class="rent">Rented GPUs at ${usd(a.rate,2)}/hr</td><td>$${rent.toFixed(3)}</td><td>${be_fmt(m.be(a.rate))}</td></tr>`;
+  api.forEach(([n,c])=>h+=`<tr><td>${n} API</td><td>$${c.toFixed(3)}</td><td>${be_fmt(own100/c)}</td></tr>`);
+  $("tok").innerHTML=h;
+}
+
+Object.keys(DEF).forEach(k=>$(k).addEventListener("input",render));
+$("tps").addEventListener("input",render);
+document.querySelectorAll(".wl").forEach(b=>b.addEventListener("click",()=>{$("tps").value=b.dataset.tps;render();}));
+$("reset").addEventListener("click",()=>{Object.entries(DEF).forEach(([k,v])=>$(k).value=v);$("tps").value=3400;render();});
+render();
+</script>
+</body>
+</html>

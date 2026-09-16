@@ -1,0 +1,8 @@
+provider,rate_per_gpu_hr,breakeven_util
+"Runpod PCIe, community",1.99,0.5191
+"Runpod PCIe, secure",2.89,0.3574
+Lambda PCIe,3.29,0.314
+"Median, 38 providers",3.36,0.3074
+Lambda (CloudZero),3.99,0.2589
+CoreWeave,4.25,0.2431
+"Azure, high end",6.98,0.148
